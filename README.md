@@ -1,4 +1,4 @@
-# WUMP-BOT WUMP CLAIM DAILY & AUTO TASK
+# WUMP-BOT CLAIM DAILY & AUTO TASK
 
 1. **Install Dependencies:**
 run the command:
