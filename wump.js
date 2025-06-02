@@ -20,10 +20,15 @@ const logger = {
   loading: (msg) => console.log(`${colors.cyan}[⟳] ${msg}${colors.reset}`),
   step: (msg) => console.log(`${colors.white}[➤] ${msg}${colors.reset}`),
   banner: () => {
-    console.log(`${colors.cyan}${colors.bold}`);
-    console.log('---------------------------------------------');
-    console.log('WUMP Auto Bot - Airdrop Insiders');
-    console.log(`---------------------------------------------${colors.reset}\n`);
+ console.log(`${colors.cyan}${colors.bold}`);
+ console.log('░██╗░░░░░░░██╗██╗░░░██╗███╗░░░███╗██████╗░  ██████╗░░█████╗░████████╗');
+ console.log('░██║░░██╗░░██║██║░░░██║████╗░████║██╔══██╗  ██╔══██╗██╔══██╗╚══██╔══╝');
+ console.log('░╚██╗████╗██╔╝██║░░░██║██╔████╔██║██████╔╝  ██████╦╝██║░░██║░░░██║░░░');
+ console.log('░░████╔═████║░██║░░░██║██║╚██╔╝██║██╔═══╝░  ██╔══██╗██║░░██║░░░██║░░░');
+ console.log('░░╚██╔╝░╚██╔╝░╚██████╔╝██║░╚═╝░██║██║░░░░░  ██████╦╝╚█████╔╝░░░██║░░░');
+ console.log('░░░╚═╝░░░╚═╝░░░╚═════╝░╚═╝░░░░░╚═╝╚═╝░░░░░  ╚═════╝░░╚════╝░░░░╚═╝░░░');
+ console.log('\nby Kazmight');
+ console.log(`${colors.reset}\n`);
   },
   agent: (msg) => console.log(`${colors.white}${msg}${colors.reset}`)
 };
