@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "axios": "^1.9.0",
-    "user-agents": "^1.1.559"
+    "user-agents": "^1.1.559",
+    "socks-proxy-agent": "^8.0.5"
   }
 }
