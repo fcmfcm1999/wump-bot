@@ -48,7 +48,7 @@ const getCommonHeaders = (token, userAgent) => ({
     priority: 'u=1, i',
     'sec-ch-ua': userAgent,
     'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"macOS"',
+    'sec-ch-ua-platform': '"Windows"',
     'sec-fetch-dest': 'empty',
     'sec-fetch-mode': 'cors',
     'sec-fetch-site': 'same-site',
@@ -236,8 +236,7 @@ async function main() {
 async function executeTasks(index) {
     try {
         const userAgent =
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0'
-        logger.agent(`Using User-Agent: ${userAgent}`)
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
 
         const data = readFileSync(ADDRESSES_FILE_PATH, 'utf-8')
         const accounts = JSON.parse(data)
