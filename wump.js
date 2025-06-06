@@ -1,8 +1,9 @@
 const axios = require('axios')
 const fs = require('fs').promises
 const path = require('path')
-const { readFileSync } = require('node:fs')
+const { readFileSync, writeFileSync } = require('node:fs')
 const { SocksProxyAgent } = require('socks-proxy-agent')
+const schedule = require('node-schedule')
 
 const ADDRESSES_FILE_PATH = path.join(__dirname, 'tokens.json')
 
@@ -47,13 +48,21 @@ const getCommonHeaders = (token, userAgent) => ({
     priority: 'u=1, i',
     'sec-ch-ua': userAgent,
     'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
+    'sec-ch-ua-platform': '"macOS"',
     'sec-fetch-dest': 'empty',
     'sec-fetch-mode': 'cors',
     'sec-fetch-site': 'same-site',
     'sec-gpc': '1',
     Referer: 'https://wump.xyz/',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
+})
+
+const getRefreshHeaders = (userAgent) => ({
+    ...getCommonHeaders(null, userAgent),
+    authorization: `Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTczNzQ2NjYyMCwiZXhwIjo0ODkzMTQwMjIwLCJyb2xlIjoiYW5vbiJ9.qSJu05pftBJrcqaHfX5HZC_kp_ubEWAd0OmHEkNEpIo`,
+    apikey: `eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTczNzQ2NjYyMCwiZXhwIjo0ODkzMTQwMjIwLCJyb2xlIjoiYW5vbiJ9.qSJu05pftBJrcqaHfX5HZC_kp_ubEWAd0OmHEkNEpIo`,
+    'x-supabase-api-version': '2024-01-01',
+    'content-type': 'application/json;charset=UTF-8',
 })
 
 const userHeaders = (token, userAgent) => ({
@@ -176,34 +185,80 @@ async function completeSocialTask(account, taskId, userAgent) {
     }
 }
 
+async function refreshToken(account, userAgent) {
+    const { proxy, refreshToken } = account
+    let httpsAgent
+    if (proxy != null && proxy !== '') {
+        httpsAgent = new SocksProxyAgent(`${proxy}`)
+    }
+
+    try {
+        const response = await axios.post(
+            'https://api.wump.xyz/auth/v1/token?grant_type=refresh_token',
+            {
+                refresh_token: refreshToken,
+            },
+            {
+                headers: getRefreshHeaders(userAgent),
+                httpsAgent,
+            }
+        )
+        console.log(response.data)
+        return response.data
+    } catch (error) {
+        logger.error(`Failed to refresh token for account ${account.id}: ${error.message}`)
+        return null
+    }
+}
+
 function parseToken(token) {
     const jsonStr = Buffer.from(token, 'base64').toString('utf8')
     const endIndex = jsonStr.indexOf('\"user\"')
-    const jsonObj = JSON.parse(jsonStr.slice(0, endIndex - 1) + '}')
-
-    return jsonObj
+    return JSON.parse(jsonStr.slice(0, endIndex - 1) + '}')
 }
 
 async function main() {
     logger.banner()
-
-    try {
-        const data = readFileSync(ADDRESSES_FILE_PATH, 'utf-8')
-        const accounts = JSON.parse(data)
-
-        const tokenInfo = parseToken(accounts[0].token)
-        if (Date.now() / 1000 > tokenInfo.expires_at) {
-            console.log('expired!')
+    const data = readFileSync(ADDRESSES_FILE_PATH, 'utf-8')
+    const accounts = JSON.parse(data)
+    for (const account of accounts) {
+        if (!account.time) {
+            continue
         }
+        schedule.scheduleJob(account.time, async () => {
+            console.log(`开始为account${account.id}执行任务`)
+            await executeTasks(account.id)
+        })
+    }
 
-        // for (const account of accounts) {
-        const account = accounts[0]
-        account.token = tokenInfo.access_token
-        logger.step(`Processing account: ${account.id}`)
-
+    console.log('定时任务已经配置完成')
+}
+async function executeTasks(index) {
+    try {
         const userAgent =
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0'
         logger.agent(`Using User-Agent: ${userAgent}`)
+
+        const data = readFileSync(ADDRESSES_FILE_PATH, 'utf-8')
+        const accounts = JSON.parse(data)
+        const account = accounts[index]
+
+        if (!account.token) {
+            const tokenInfo = parseToken(account.base64Token)
+            account.token = tokenInfo.access_token
+            account.refreshToken = tokenInfo.refresh_token
+            account.expireAt = tokenInfo.expires_at
+        }
+        if (Date.now() / 1000 > account.expireAt) {
+            console.log('expired! Begin to refresh token')
+            const renewedTokenInfo = await refreshToken(account, userAgent)
+            account.token = renewedTokenInfo.access_token
+            account.expireAt = renewedTokenInfo.expires_at
+            account.refreshToken = renewedTokenInfo.refresh_token
+        }
+        writeFileSync(ADDRESSES_FILE_PATH, JSON.stringify(accounts, null, 2))
+
+        logger.step(`Processing account: ${account.id}`)
 
         logger.loading('Fetching user information...')
         const userInfo = await getUserInfo(account, userAgent)
@@ -213,20 +268,30 @@ async function main() {
             logger.wallet(`Total Points: ${userInfo.total_points}`)
         } else {
             logger.error('Skipping account due to user info fetch failure')
-            // continue
         }
 
         logger.loading('Fetching tasks...')
         const tasks = await getTasks(account, userAgent)
         const completedTasks = await getUserTasks(account, userInfo.id, userAgent)
+
         const completedTaskIds = completedTasks.map((it) => it.task_id)
+        const dailyTasks = completedTasks.filter((it) => it.task_type === 'daily')
+        const latestDailyTask = dailyTasks[dailyTasks.length - 1]
+        const completedAt = new Date(latestDailyTask.completed_at)
+        const now = new Date()
+        let dailyTaskId = null
+        if (now.toISOString().slice(0, 10) > completedAt.toISOString().slice(0, 10)){
+            dailyTaskId = latestDailyTask.id
+        }
 
         const uncompletedTasks = tasks.filter(
-            (it) => it.task_type != 'referral' && !completedTaskIds.includes(it.id)
+            (it) =>
+                it.task_type !== 'referral' &&
+                (!completedTaskIds.includes(it.id) || dailyTaskId === it.id)
         )
+
         if (uncompletedTasks.length === 0) {
             logger.info('current no tasks')
-            uncompletedTasks.push(tasks[0])
         }
 
         for (const task of uncompletedTasks) {
@@ -252,7 +317,6 @@ async function main() {
         }
 
         logger.success('Finished processing all tasks for this account\n')
-        // }
 
         logger.success('All account processed successfully!')
     } catch (error) {
